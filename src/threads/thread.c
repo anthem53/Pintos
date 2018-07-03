@@ -690,7 +690,7 @@ void donate_priority_chain(struct lock * lock)
   if(lock -> max_priority_on_waiter < cur ->priority)
     lock -> max_priority_on_waiter = cur ->priority;
   
-  struct list_elem * e = list_begin(&holder->donatation_lock_list);
+  struct list_elem * e = list_begin(&holder->donation_lock_list);
   bool is_exist = false;
   
   while(e != list_end(&holder->donation_lock_list)){
