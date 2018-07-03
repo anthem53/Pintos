@@ -74,7 +74,6 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static struct thread * ready_thread_to_run();
 static void check_max_priority();
 static void donate_priority_chain(struct lock * lock);
 
@@ -647,14 +646,14 @@ bool priority_cmp(struct list_elem * e1, struct list_elem * e2, void * aux)
 }
 
 
-static struct thread * ready_thread_to_run()
+struct thread * ready_thread_to_run()
 {
   if(list_empty(&ready_list))
     return idle_thread;
   else
     return list_entry(list_front(&ready_list),struct thread, elem);     
 }
-static check_max_priority()
+void check_max_priority()
 {
   enum intr_level old_level = intr_disable();
   struct thread * cur = thread_current();
@@ -756,6 +755,11 @@ void thread_release (struct lock * lock , struct thread * lock_holder)
 
 
   intr_set_level(old_level);
+}
+
+struct thread * get_idle_thread()
+{
+  return idle_thread;
 }
 
 

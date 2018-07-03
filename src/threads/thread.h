@@ -147,5 +147,8 @@ void thread_wake_up (int);
 bool priority_cmp(struct list_elem * e1, struct list_elem * e2, void * aux);
 
 void thread_donate(struct lock * lock);
+struct thread * ready_thread_to_run();
+struct thread * get_idle_thread();
+
 
 #endif /* threads/thread.h */
