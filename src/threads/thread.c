@@ -24,6 +24,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/*  List of processes in THREAD_BLOCK state, and excuted
+    thread_sleep() function. */
+static struct list sleep_list;
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -70,6 +74,9 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static struct thread * ready_thread_to_run();
+static check_max_priority();
+
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -92,6 +99,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -208,6 +216,10 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  
+  if(thread_current()->priority < t->priority)
+    thread_yield();
+
 
   return tid;
 }
@@ -245,7 +257,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list,&t->elem,priority_cmp,NULL);
+//  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -316,7 +329,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem, priority_cmp, NULL);
+//    list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -343,7 +357,16 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread * cur = thread_current();
+  
+  cur -> base_priority = new_priority;
+
+  if(list_empty(&cur->donation_lock_list)){
+    cur->priority = new_priority;
+  }
+  
+  check_max_priority();
+
 }
 
 /* Returns the current thread's priority. */
@@ -468,6 +491,8 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->base_priority = priority;
+  list_init(&t->donation_lock_list);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
@@ -581,6 +606,68 @@ allocate_tid (void)
 
   return tid;
 }
+
+void thread_sleep (int wake_up_time)
+{
+  enum intr_level old_level;
+  struct thread * cur = thread_current();
+  old_level = intr_disable();
+
+  cur->wake_up_time = wake_up_time;
+
+  list_push_back (&sleep_list, &cur->elem);
+  thread_block();
+
+  intr_set_level(old_level);
+
+}
+void thread_wake_up (int wake_ticks)
+{
+  struct list_elem * e;
+  e = list_begin(&sleep_list);
+
+  while(e != list_end(&sleep_list)){
+    struct thread * t = list_entry(e, struct thread, elem);
+    if(t -> wake_up_time <= wake_ticks){
+      e = list_remove(&t->elem);
+      thread_unblock(t);
+    }
+    else{
+      e = list_next(e);
+    }
+  }
+
+}
+bool priority_cmp(struct list_elem * e1, struct list_elem * e2, void * aux)
+{
+  struct thread * t1 = list_entry(e1,struct thread, elem);
+  struct thread * t2 = list_entry(e2, struct thread, elem);
+  return t1 -> priority > t2 ->priority; 
+}
+
+
+static struct thread * ready_thread_to_run()
+{
+  if(list_empty(&ready_list))
+    return idle_thread;
+  else
+    return list_entry(list_front(&ready_list),struct thread, elem);     
+}
+static check_max_priority()
+{
+  enum intr_level old_level = intr_disable();
+  struct thread * cur = thread_current();
+  struct thread * next = ready_thread_to_run();
+
+  if(next != idle_thread){
+    if(cur -> priority < next ->priority)
+      thread_yield();
+ 
+  }
+}
+
+
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
