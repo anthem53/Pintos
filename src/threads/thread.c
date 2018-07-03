@@ -75,8 +75,8 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 static struct thread * ready_thread_to_run();
-static check_max_priority();
-
+static void check_max_priority();
+static void donate_priority_chain(struct lock * lock);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -492,6 +492,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->base_priority = priority;
+  t->waited_lock = NULL;
   list_init(&t->donation_lock_list);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
@@ -665,8 +666,97 @@ static check_max_priority()
  
   }
 }
+void thread_donate(struct lock * lock)
+{
+  enum intr_level old_level = intr_disable();
+  donate_priority_chain(lock);
+  thread_current()->waited_lock = lock;
+  thread_yield();  
+
+  intr_set_level(old_level);
+
+}
+
+void donate_priority_chain(struct lock * lock)
+{
+  enum intr_level old_level = intr_disable();
+
+  struct thread * cur = thread_current();
+  struct thread * holder = lock ->holder;
+  
+
+  holder ->priority = cur -> priority;
+
+  if(lock -> max_priority_on_waiter < cur ->priority)
+    lock -> max_priority_on_waiter = cur ->priority;
+  
+  struct list_elem * e = list_begin(&holder->donatation_lock_list);
+  bool is_exist = false;
+  
+  while(e != list_end(&holder->donation_lock_list)){
+    struct lock * i = list_entry(e,struct lock, lock_elem);
+    if (i == lock) {
+      is_exist = true;
+      break;
+    }
+    else{
+      e = list_next(e);
+    }
+      
+  }
+  if(is_exist ==false){
+    list_push_back(&holder->donation_lock_list,&lock->lock_elem);
+  }
+
+  list_remove(&holder->elem);
+  list_push_front(&ready_list,&holder->elem);
+
+  if(holder->waited_lock != NULL)
+    donate_priority_chain(holder->waited_lock);
+
+  intr_set_level(old_level); 
+
+}
+
+void thread_release (struct lock * lock , struct thread * lock_holder)
+{
+  enum intr_level old_level = intr_disable();
+  struct thread * holder = lock_holder;
+  struct list * donated_lock_list = &holder -> donation_lock_list;
 
 
+  int max_priority = -1;
+  struct list_elem * e = list_begin(donated_lock_list);
+  while(e != list_end(donated_lock_list)){
+    struct lock * i = list_entry(e, struct lock, lock_elem);
+    
+    if( i == lock){
+      lock -> max_priority_on_waiter = -1;
+      e = list_remove(&i->lock_elem);
+    }
+    else{
+      if(max_priority < i->max_priority_on_waiter){
+        max_priority = i->max_priority_on_waiter;
+      }
+      e = list_next(e);
+    }
+
+  }
+
+  holder ->waited_lock = NULL;
+  if(max_priority == - 1){
+    holder->priority = holder-> base_priority;
+    check_max_priority();
+  }
+  else{
+    holder->priority = max_priority;
+    check_max_priority();
+  }
+  
+
+
+  intr_set_level(old_level);
+}
 
 
 /* Offset of `stack' member within `struct thread'.

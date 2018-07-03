@@ -92,6 +92,7 @@ struct thread
     int wake_up_time;                  
     int base_priority;
     struct list donation_lock_list;
+    struct lock * waited_lock;
  
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -144,5 +145,7 @@ int thread_get_load_avg (void);
 void thread_sleep (int );
 void thread_wake_up (int);
 bool priority_cmp(struct list_elem * e1, struct list_elem * e2, void * aux);
+
+void thread_donate(struct lock * lock);
 
 #endif /* threads/thread.h */
