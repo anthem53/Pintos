@@ -63,6 +63,10 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+static int load_avg;
+
+
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -76,6 +80,8 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 static void check_max_priority();
 static void donate_priority_chain(struct lock * lock);
+static int ready_thread_number();
+
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -377,33 +383,33 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice ) 
 {
-  /* Not yet implemented. */
+  enum intr_level old_level = intr_disable();
+  thread_current()->nice  = nice;
+  intr_set_level(old_level);  
+
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current() -> load_avg * 100;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread->current() -> recent_cpu * 100;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -492,6 +498,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->base_priority = priority;
   t->waited_lock = NULL;
+  t-> nice = 0;
+  t->recent_cpu = 0;
   list_init(&t->donation_lock_list);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
@@ -757,10 +765,33 @@ void thread_release (struct lock * lock , struct thread * lock_holder)
   intr_set_level(old_level);
 }
 
+
+static int ready_thread_number()
+{
+
+  int result = 0;
+
+  if ( thread_current() != idle_thread)
+    result ++;
+
+  result = result + list_size(&ready_list);
+  return result;
+}
+
+
 struct thread * get_idle_thread()
 {
   return idle_thread;
 }
+
+void thread_update_load_avg()
+{
+  if
+  
+}
+void thread_update_recent_cpu();
+void thread_update_priority_mlfqs();
+
 
 
 /* Offset of `stack' member within `struct thread'.

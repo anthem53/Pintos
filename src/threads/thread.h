@@ -93,6 +93,8 @@ struct thread
     int base_priority;
     struct list donation_lock_list;
     struct lock * waited_lock;
+    int nice;
+    int recent_cpu;
  
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -149,6 +151,10 @@ bool priority_cmp(struct list_elem * e1, struct list_elem * e2, void * aux);
 void thread_donate(struct lock * lock);
 struct thread * ready_thread_to_run();
 struct thread * get_idle_thread();
+
+void thread_update_load_avg();
+void thread_update_recent_cpu();
+void thread_update_priority_mlfqs();
 
 
 #endif /* threads/thread.h */
