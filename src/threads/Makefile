@@ -6,6 +6,8 @@ d:
 
 f:
 	pintos -v -k -T 60 --qemu -- -q -mlfqs  run mlfqs-nice-2
+g:
+	pintos -v -k -T 10 --qemu -- -q run priority-change
 
 
 m:

@@ -154,7 +154,9 @@ struct thread * get_idle_thread();
 
 void thread_update_load_avg();
 void thread_update_recent_cpu();
+void thread_update_recent_cpu_one();
 void thread_update_priority_mlfqs();
 
+bool get_thread_mlfqs();
 
 #endif /* threads/thread.h */

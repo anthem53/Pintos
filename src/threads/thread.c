@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixedpoint.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -63,9 +64,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
-static int load_avg;
-
-
+int load_avg;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -387,6 +386,7 @@ thread_set_nice (int nice )
 {
   enum intr_level old_level = intr_disable();
   thread_current()->nice  = nice;
+  thread_update_priority_mlfqs();
   intr_set_level(old_level);  
 
 }
@@ -402,14 +402,16 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  return thread_current() -> load_avg * 100;
+  int result = (load_avg * 100);
+
+  return  result;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return thread->current() -> recent_cpu * 100;
+  return thread_current() -> recent_cpu * 100;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -765,7 +767,6 @@ void thread_release (struct lock * lock , struct thread * lock_holder)
   intr_set_level(old_level);
 }
 
-
 static int ready_thread_number()
 {
 
@@ -786,12 +787,57 @@ struct thread * get_idle_thread()
 
 void thread_update_load_avg()
 {
-  if
+  if ( thread_mlfqs != true){
+    return;
+  }
+
+  int ready_threads = ready_thread_number();
+  int coff1 = div_fd_int(int_to_fd(59),60);
+  int coff2 = div_fd_int(int_to_fd( 1),60);
+   
+
+  load_avg = fd_to_int_round(add_fd(mul_fd_int(coff1,load_avg) , mul_fd_int(coff2 ,ready_threads)));
+  printf(">>> load_avg %d , thread name : %s\n",load_avg, thread_name());
   
 }
-void thread_update_recent_cpu();
-void thread_update_priority_mlfqs();
+void thread_update_recent_cpu()
+{
+  if ( thread_mlfqs != true){
+    return;
+  }
 
+  struct thread * cur = thread_current();
+
+  cur->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * cur->recent_cpu + cur->nice;
+}
+
+void thread_update_recent_cpu_one()
+{
+  if ( thread_mlfqs != true){
+    return;
+  }
+  struct thread * cur =  thread_current();
+  
+  if (cur != idle_thread)
+    cur -> recent_cpu ++;
+
+}
+
+void thread_update_priority_mlfqs()
+{
+  if ( thread_mlfqs != true){
+    return;
+  }  
+
+  struct thread * cur = thread_current();
+
+  cur->priority = PRI_MAX - (cur->recent_cpu / 4) - (cur ->nice * 2);
+}
+
+bool get_thread_mlfqs()
+{
+  return thread_mlfqs;
+}
 
 
 /* Offset of `stack' member within `struct thread'.
