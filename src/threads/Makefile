@@ -2,7 +2,7 @@ include ../Makefile.kernel
 
 
 d:
-	pintos -v -k -T 20 --qemu -- -q -mlfqs run mlfqs-recent-1
+	pintos -v -k -T 30 --qemu -- -q -mlfqs run mlfqs-recent-1
 
 f:
 	pintos -v -k -T 60 --qemu -- -q -mlfqs  run mlfqs-nice-2
@@ -17,5 +17,7 @@ res:
 	make check
 t:
 	vim thread.c
+t2:
+	vim timer.c
 s:
 	vim synch.c

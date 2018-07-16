@@ -802,13 +802,13 @@ void thread_update_load_avg()
   load_avg = add_fd(mul_fd(coff1,load_avg) , mul_fd(coff2 ,ready_threads));
   
 }
-void thread_update_recent_cpu()
+void thread_update_recent_cpu(struct thread * input)
 {
   if ( thread_mlfqs != true){
     return;
   }
 
-  struct thread * cur = thread_current();
+  struct thread * cur = input;
   
   int double_load_avg = mul_fd_int(load_avg,2);
   int double_load_avg_plus_1 = add_fd_int(double_load_avg,1);
@@ -818,7 +818,20 @@ void thread_update_recent_cpu()
 
  // cur->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * cur->recent_cpu + cur->nice;
 }
+void thread_update_recent_cpu_all()
+{
+  if (thread_mlfqs != true)
+    return;
 
+  struct list_elem * e = list_begin(&all_list);
+
+  while(e != list_end(&all_list)){
+    struct thread* cur = list_entry(e, struct thread, allelem);
+    thread_update_recent_cpu(cur);
+
+  } 
+
+}
 void thread_update_recent_cpu_one()
 {
   if ( thread_mlfqs != true){
@@ -827,7 +840,7 @@ void thread_update_recent_cpu_one()
   struct thread * cur =  thread_current();
   
   if (cur != idle_thread)
-    cur -> recent_cpu ++;
+    cur ->recent_cpu = add_fd_int(cur -> recent_cpu,1);
 
 }
 

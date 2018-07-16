@@ -153,7 +153,8 @@ struct thread * ready_thread_to_run(void);
 struct thread * get_idle_thread(void);
 
 void thread_update_load_avg(void);
-void thread_update_recent_cpu(void);
+void thread_update_recent_cpu(struct thread*);
+void thread_update_recent_cpu_all (void);
 void thread_update_recent_cpu_one(void);
 void thread_update_priority_mlfqs(void);
 
