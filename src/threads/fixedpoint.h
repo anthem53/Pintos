@@ -5,7 +5,7 @@
 #define F 1 << 14
 
 int int_to_fd(int n);
-int fd_to_int_rount (int x);
+int fd_to_int_round (int x);
 int add_fd(int x, int y);
 int sub_fd(int x, int y);
 int add_fd_int(int x, int n);
@@ -22,10 +22,11 @@ int int_to_fd(int n)
 
 int fd_to_int_round(int x)
 {
+  return x / F;
   if(x >= 0 )
-    return ( x + F / 2) / F;
+    return ( x + (F / 2)) / F;
   else
-    return ( x - F / 2) / F;
+    return ( x - (F / 2)) / F;
 }
 
 int add_fd(int x, int y)

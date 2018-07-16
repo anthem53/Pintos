@@ -149,13 +149,13 @@ void thread_wake_up (int);
 bool priority_cmp(struct list_elem * e1, struct list_elem * e2, void * aux);
 
 void thread_donate(struct lock * lock);
-struct thread * ready_thread_to_run();
-struct thread * get_idle_thread();
+struct thread * ready_thread_to_run(void);
+struct thread * get_idle_thread(void);
 
-void thread_update_load_avg();
-void thread_update_recent_cpu();
-void thread_update_recent_cpu_one();
-void thread_update_priority_mlfqs();
+void thread_update_load_avg(void);
+void thread_update_recent_cpu(void);
+void thread_update_recent_cpu_one(void);
+void thread_update_priority_mlfqs(void);
 
 bool get_thread_mlfqs();
 

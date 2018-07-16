@@ -402,7 +402,7 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  int result = (load_avg * 100);
+  int result = fd_to_int_round(mul_fd_int(load_avg, 100));
 
   return  result;
 }
@@ -791,13 +791,21 @@ void thread_update_load_avg()
     return;
   }
 
-  int ready_threads = ready_thread_number();
-  int coff1 = div_fd_int(int_to_fd(59),60);
-  int coff2 = div_fd_int(int_to_fd( 1),60);
-   
+  int ready_threads = int_to_fd(ready_thread_number());
+  int num59 = int_to_fd(59);
+  int num60 = int_to_fd(60);
+  int num1  = int_to_fd( 1);
 
-  load_avg = fd_to_int_round(add_fd(mul_fd_int(coff1,load_avg) , mul_fd_int(coff2 ,ready_threads)));
-  printf(">>> load_avg %d , thread name : %s\n",load_avg, thread_name());
+  int coff1 = div_fd(num59,num60); /* (59 / 60) */
+  int coff2 = div_fd(num1,num60); /* ( 1 / 60) */
+  
+
+  printf(">>> LA : %d.%02d \n", thread_get_load_avg() / 100,thread_get_load_avg() % 100); 
+  printf(">>> ready_threads : %d, coff RT : %d\n", ready_thread_number(), ready_threads);
+  printf(">>> num59 : %d, num 60 : %d , num 1 : %d, coff1 : %d, coff2 :%d\n",num59, num60, num1, coff1, coff2);
+  printf(">>> coff2 ready thread : %d, int form : %d\n", mul_fd(coff2, ready_threads),fd_to_int_round(mul_fd_int(mul_fd(coff2, ready_threads),100)));
+  load_avg = add_fd(mul_fd(coff1,load_avg) , mul_fd(coff2 ,ready_threads));
+  printf(">>> load_avg : %d , thread name : %s\n",thread_get_load_avg()/100, thread_name());
   
 }
 void thread_update_recent_cpu()

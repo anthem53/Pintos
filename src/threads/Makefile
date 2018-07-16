@@ -9,6 +9,8 @@ f:
 g:
 	pintos -v -k -T 10 --qemu -- -q run priority-change
 
+v:
+	vim fixedpoint.h
 
 m:
 	vim Makefile
