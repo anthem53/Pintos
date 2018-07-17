@@ -815,7 +815,6 @@ void thread_update_recent_cpu(struct thread * input)
   int nice = int_to_fd(cur->nice);
 
   cur->recent_cpu = add_fd(mul_fd(div_fd(double_load_avg, double_load_avg_plus_1),cur->recent_cpu),nice);
-
  // cur->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * cur->recent_cpu + cur->nice;
 }
 void thread_update_recent_cpu_all()
@@ -825,11 +824,12 @@ void thread_update_recent_cpu_all()
 
   struct list_elem * e = list_begin(&all_list);
 
+  int i = 1;
   while(e != list_end(&all_list)){
     struct thread* cur = list_entry(e, struct thread, allelem);
     thread_update_recent_cpu(cur);
-
-  } 
+    e = list_next(e);
+  }  
 
 }
 void thread_update_recent_cpu_one()
