@@ -4,7 +4,7 @@
 #define Q 14
 #define F 1 << 14
 
-static f = F;
+static int f = F;
 
 int int_to_fd(int n);
 int fd_to_int_round (int x);
