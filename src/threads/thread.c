@@ -81,6 +81,7 @@ static void check_max_priority();
 static void donate_priority_chain(struct lock * lock);
 static int ready_thread_number();
 
+static void check_max_priority_mlfqs();
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -387,6 +388,7 @@ thread_set_nice (int nice )
   enum intr_level old_level = intr_disable();
   thread_current()->nice  = nice;
   thread_update_priority_mlfqs();
+  check_max_priority_mlfqs();  
   intr_set_level(old_level);  
 
 }
@@ -674,6 +676,7 @@ void check_max_priority()
       thread_yield();
  
   }
+  intr_set_level(old_level);
 }
 void thread_donate(struct lock * lock)
 {
@@ -815,7 +818,6 @@ void thread_update_recent_cpu(struct thread * input)
   int nice = int_to_fd(cur->nice);
 
   cur->recent_cpu = add_fd(mul_fd(div_fd(double_load_avg, double_load_avg_plus_1),cur->recent_cpu),nice);
- // cur->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * cur->recent_cpu + cur->nice;
 }
 void thread_update_recent_cpu_all()
 {
@@ -824,7 +826,6 @@ void thread_update_recent_cpu_all()
 
   struct list_elem * e = list_begin(&all_list);
 
-  int i = 1;
   while(e != list_end(&all_list)){
     struct thread* cur = list_entry(e, struct thread, allelem);
     thread_update_recent_cpu(cur);
@@ -843,16 +844,53 @@ void thread_update_recent_cpu_one()
     cur ->recent_cpu = add_fd_int(cur -> recent_cpu,1);
 
 }
-
 void thread_update_priority_mlfqs()
+{
+  if(thread_mlfqs != true)
+    return;
+
+  struct list_elem * e = list_begin(&all_list);
+  while(e != list_end(&all_list)){
+    struct thread * target = list_entry(e,struct thread , allelem);
+    thread_update_priority_mlfqs_execute(target);
+    e = list_next(e);
+  }
+}
+
+void thread_update_priority_mlfqs_execute(struct thread * input)
 {
   if ( thread_mlfqs != true){
     return;
   }  
 
-  struct thread * cur = thread_current();
+  struct thread * cur = input;
+  int qtr_recent_cpu = div_fd_int(cur->recent_cpu, 4);
+  int double_nice = int_to_fd(cur->nice * 2);
+  int priority_max = int_to_fd (PRI_MAX);
 
-  cur->priority = PRI_MAX - (cur->recent_cpu / 4) - (cur ->nice * 2);
+  cur ->priority = sub_fd(sub_fd(priority_max,qtr_recent_cpu),double_nice);
+}
+void check_max_priority_mlfqs()
+{
+  struct list_elem * e = list_begin(&all_list);
+  
+  int max = -1;
+  while(e != list_end(&all_list)){
+    struct thread * cur = list_entry(e,struct thread, allelem);
+    if(cur -> status == THREAD_DYING ||  cur -> status == THREAD_BLOCKED){
+      e = list_next(e);
+    }
+    else{
+      cur ->priority = cur ->priority > max ? cur ->priority : max;
+      e = list_next(e);
+    }
+  }
+  
+  if(max > thread_current()->priority){
+    thread_yield();
+  }
+  
+
 }
 
 bool get_thread_mlfqs()

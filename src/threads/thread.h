@@ -157,6 +157,8 @@ void thread_update_recent_cpu(struct thread*);
 void thread_update_recent_cpu_all (void);
 void thread_update_recent_cpu_one(void);
 void thread_update_priority_mlfqs(void);
+void thread_update_priority_mlfqs_execute(struct thread*);
+
 
 bool get_thread_mlfqs();
 
