@@ -20,9 +20,71 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void cmdlineParsing(const char * cmdline, char result[][20], int * argc ); 
+static void insert_argument(char  argv[][20], int argc, void ** esp); 
+
+
+void cmdlineParsing(const char * cmdline, char result[][20], int * argc )
+{
+  char * token;
+  char * rest = cmdline;
+  int i;
+  *argc = 0;
+  for(i = 0, token = strtok_r(rest, " ", &rest); 
+      token != NULL ;
+      token = strtok_r(rest, " ", &rest),i++
+     ){
+      strlcpy(result[i],token,20);
+      *argc = *argc + 1;
+  }
+}
+void insert_argument(char argv[][20], int argc, void ** esp)
+{
+  int argv_addr[30] = {0};
+  int i ;
+
+  /* argv data save */
+  for(i = argc - 1 ; i >= 0; i --){
+
+    /*agrv local copy!*/
+    char target[20];
+    strlcpy(target,argv[i],20);
+    /*know legnth */
+    int len = strlen(target);
+    *esp = (char*)*esp - (len + 1);
+    argv_addr[i] = *esp;
+
+    strlcpy((char*)*esp,target,20);
+  }
+
+  void * esp_base =  *esp;
+  /* word align */
+  *esp = (uint8_t * ) *esp - 1;
+  *((uint8_t*)*esp) = 0;
+
+  /* argv last point zero  */
+  *esp = (char **) *esp - 1;
+  *((char**)*esp) = 0;
+
+  
+  /* the pointer to argv data 0 ~ n */
+  for(i = argc - 1; i >= 0; i --)
+  {
+    *esp = (char**) *esp - 1; 
+    *((char**)*esp) = argv_addr[i];
+  }
+  /* pointer argv to argv[0] */  
+  void * pre = *esp;
+  *esp = (char ***) *esp - 1;
+  *((char ***)*esp) = pre;
  
+  *esp = ( int*) *esp - 1;
+  *((int*)*esp) = argc;
+ 
+  *esp = ( void **) *esp - 1;
+  *((void**)*esp) = 0;
 
-
+}
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -55,6 +117,13 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  char element[30][20];   /* don't make sure 30 is enough */
+  int argc = 0;
+
+  cmdlineParsing (file_name, element,&argc);  
+  int i = 0;
+  for(i; i < argc ; i++){
+  }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -68,6 +137,7 @@ start_process (void *file_name_)
   if (!success) 
     thread_exit ();
 
+  insert_argument(element, argc, &if_.esp);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -90,6 +160,10 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  while(1){
+    ;
+  }
+
   return -1;
 }
 
@@ -244,7 +318,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 
-  /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) 
     {
