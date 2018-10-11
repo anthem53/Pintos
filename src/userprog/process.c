@@ -23,7 +23,6 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void cmdlineParsing(const char * cmdline, char result[][20], int * argc ); 
 static void insert_argument(char  argv[][20], int argc, void ** esp); 
 
-
 void cmdlineParsing(const char * cmdline, char result[][20], int * argc )
 {
   char * token;
@@ -66,7 +65,6 @@ void insert_argument(char argv[][20], int argc, void ** esp)
   *esp = (char **) *esp - 1;
   *((char**)*esp) = 0;
 
-  
   /* the pointer to argv data 0 ~ n */
   for(i = argc - 1; i >= 0; i --)
   {
@@ -85,6 +83,9 @@ void insert_argument(char argv[][20], int argc, void ** esp)
   *((void**)*esp) = 0;
 
 }
+
+
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -102,10 +103,13 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+
+  
   return tid;
 }
 
@@ -119,11 +123,7 @@ start_process (void *file_name_)
   bool success;
   char element[30][20];   /* don't make sure 30 is enough */
   int argc = 0;
-
   cmdlineParsing (file_name, element,&argc);  
-  int i = 0;
-  for(i; i < argc ; i++){
-  }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -160,8 +160,20 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+
+  struct thread * cur = thread_current();
+  struct thread * child_thread = thread_search_by_tid(child_tid);
+  list_push_back(&cur->child_list,&child_thread->child_elem);
+  child_thread->parent = cur;
+
   while(1){
-    ;
+    static int d = 0;
+    if(d++ % 50000000 == 0){
+    } 
+    if(child_thread_search(child_thread) == false){
+      break;
+    }
+    
   }
 
   return -1;

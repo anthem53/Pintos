@@ -1,12 +1,18 @@
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "devices/shutdown.h"
+
+
 
 static void syscall_handler (struct intr_frame *);
+static void verify_pointer(struct intr_frame * esp);
 static int write(int fd, void * buf, int size);
-
+static void exit(int status);
 
 void
 syscall_init (void) 
@@ -15,22 +21,26 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
-  void * esp = f-> esp;
-  //printf(">>>system esp ium  : %d \n", *((int*)esp));  
+ // printf(">>> system call start!! : %s \n",thread_current()->name);
+  struct intr_frame * esp = f-> esp;
+  
+
+ // printf(">>> esp pointer value : %p\n",esp);
+  verify_pointer(esp);
+ // printf(">>>system esp ium  : %d \n", *((int*)esp));  
   int system_call_num = *((int*)esp);  
   int arg[100] = {0}, i = 0;
   switch(system_call_num){
     case  SYS_HALT:
-      printf(">>> halt \n");
+      shutdown_power_off();
       break;
     case SYS_EXIT: 
-      printf(">>> exit \n");
-      printf(">>> current thread_name : %s\n",thread_current()->name);
       arg[0] = *((int*)esp + 1);
-      printf("%s: exit(%d)\n",thread_current()->name, arg[0]);
-      thread_exit();
+      esp -> eax = arg[0];
+      exit(arg[0]);      
+ 
       break;
     case SYS_EXEC : 
       printf(">>> exec \n");
@@ -76,12 +86,50 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 }
 
+static void verify_pointer(struct intr_frame * esp){
+  uint32_t *pd = thread_current()->pagedir;
+  
+  void * result = pagedir_get_page(pd,esp);
+
+  if(result == NULL){
+//    printf(">>>wrong Vaddress : %p \n",esp);
+    exit(-1); 
+  }
+  else{
+//    printf(">>> CORRECT ADDRESS\n");
+  } 
+  return;
+
+}
+
+
+static void exit(int status)
+{
+  char name[20];
+  strlcpy(name,thread_current()->name,20);
+ 
+  int i =0;
+  for(i = 0; i < strlen(name) + 1; i++ ){
+    if(name[i] == ' '){
+      name[i] = '\0';
+    }
+  }
+
+  printf("%s: exit(%d)\n",name, status);
+  list_remove(&thread_current()->child_elem);
+  thread_exit();
+
+}
+
 static int write(int fd, void * buf, int size)
 {
   if(fd == 1){
     putbuf(buf,size);
+    return size;
   }
 
   return size;
 }
+
+
 
