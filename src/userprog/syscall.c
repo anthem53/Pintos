@@ -11,8 +11,11 @@
 
 static void syscall_handler (struct intr_frame *);
 static void verify_pointer(struct intr_frame * esp);
-static int write(int fd, void * buf, int size);
+
+
 static void exit(int status);
+static bool create(const char * file, unsigned initial_size);
+static int write(int fd, void * buf, int size);
 
 void
 syscall_init (void) 
@@ -32,13 +35,14 @@ syscall_handler (struct intr_frame *f)
  // printf(">>>system esp ium  : %d \n", *((int*)esp));  
   int system_call_num = *((int*)esp);  
   int arg[100] = {0}, i = 0;
+
   switch(system_call_num){
     case  SYS_HALT:
       shutdown_power_off();
       break;
     case SYS_EXIT: 
       arg[0] = *((int*)esp + 1);
-      esp -> eax = arg[0];
+      f -> eax = arg[0];
       exit(arg[0]);      
  
       break;
@@ -49,7 +53,14 @@ syscall_handler (struct intr_frame *f)
       printf(">>> wait \n");
       break;
     case SYS_CREATE:
-      printf(">>> create \n");
+      for(i = 0; i < 2; i++)
+        arg[i] = *((int*)esp + 1 + i);
+
+      bool result = create((char*)arg[0],(unsigned)arg[1]);
+      f -> eax = (uint32_t)result;
+//      printf(">>> create result : %d\n",result);
+  //    printf(">>> craete eax : %d \n",esp->eax);
+      //printf(">>> create \n");
       break;
     case SYS_REMOVE :
       printf(">>> remove \n");
@@ -114,10 +125,38 @@ static void exit(int status)
       name[i] = '\0';
     }
   }
-
+  
+  if (status < 0)
+    status = -1;
   printf("%s: exit(%d)\n",name, status);
   list_remove(&thread_current()->child_elem);
   thread_exit();
+
+}
+
+static bool create(const char * file, unsigned initial_size){
+
+  uint32_t * pd = thread_current()->pagedir;
+  /* check correct file*/ 
+
+  void * page = pagedir_get_page(pd,(void*)file);
+  if(page == NULL)
+    exit(-1) ;
+  
+
+   if(file == NULL) 
+    exit(-1);
+
+  /* check string correct*/
+  int len = strlen(file);
+  if(len == 0 || len > 14){
+    return false;
+  }
+
+
+  /* already existed*/
+  bool result = filesys_create(file, initial_size);
+  return result;  
 
 }
 
