@@ -2,12 +2,13 @@ include ../Makefile.kernel
 
 
 
-create normal:
-	pintos -v -k -T 60 --qemu  --filesys-size=2 -p tests/userprog/create-normal -a create-normal -- -q  -f run create-normal
+read normal:
+	pintos -k -T 60 --qemu  --filesys-size=2 -p tests/userprog/read-normal -a read-normal -p ../../tests/userprog/sample.txt -a sample.txt -- -q  -f run read-normal
 
 
-create long:
-	pintos -v -k -T 60 --qemu  --filesys-size=2 -p tests/userprog/create-long -a create-long -- -q  -f run create-longi
+
+read boundary:
+	pinntos -v -k -T 60 --qemu  --filesys-size=2 -p tests/userprog/read-boundary -a read-boundary -p ../../tests/userprog/sample.txt -a sample.txt -- -q  -f run read-boundary
 
 
 create empty:

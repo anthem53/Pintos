@@ -5,9 +5,11 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/off_t.h"
 
 struct file_decripter{
   void * file;
@@ -16,15 +18,19 @@ struct file_decripter{
 }; 
 
 
-struct file_decripter fd[100];
+struct file_decripter fd_list[100];
 
 static void syscall_handler (struct intr_frame *);
 static void verify_pointer(struct intr_frame * esp);
 static int insert_fd_list(void * file, char * name);
+static void check_correct_pointer(void *);
+
 
 static void exit(int status);
 static bool create(const char * file, unsigned initial_size);
 static int open (char * file);
+static int filesize(int fd);
+static int read (int fd, void * buffer, off_t size);
 static void close(int fd);
 static int write(int fd, void * buf, int size);
 
@@ -32,7 +38,7 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  memset(fd,0,100);
+  memset(fd_list,0,100);
 
 }
 
@@ -81,10 +87,16 @@ syscall_handler (struct intr_frame *f)
       f->eax = result_fd;
       break;
     case SYS_FILESIZE :
-      printf(">>> filesize \n");
+      arg[0] = *((int*)esp + 1 );
+      f-> eax = filesize(arg[0]);
+
+      //printf(">>> filesize \n");
       break;
     case SYS_READ :
-      printf(">>> read \n");
+      for(i = 0; i < 3; i++){
+        arg[i] = *((int *)esp + 1 + i);
+      }
+      f -> eax = read(arg[0],(void *)arg[1],(off_t)arg[2]);
       break;
     case SYS_WRITE :
       for(i = 0; i < 3; i ++){
@@ -129,16 +141,32 @@ static int insert_fd_list(void * file, char * name){
   int i =0;
 
   for(i = 2 ; i < 100; i++){
-    if(fd[i].is_open == false){
-      fd[i].file = file;
-      strlcpy(fd[i].name, name , 14);
-      fd[i].is_open = true;
+    if(fd_list[i].is_open == false){
+      fd_list[i].file = file;
+      strlcpy(fd_list[i].name, name , 14);
+      fd_list[i].is_open = true;
       return i;
       break;
     }
   }
 
 }
+
+static void check_correct_pointer(void * ptr)
+{
+ // printf(">>> buffer ptr : %p\n",ptr);
+  if(is_user_vaddr(ptr) == false){
+   // printf(">>> Over PHYS_BASE : %p\n",ptr);
+    exit(-1);
+  }
+   
+
+  if(pagedir_get_page(thread_current()->pagedir,ptr) == NULL){
+   // printf(">>> Fail to get page of ptr(%p)\n",ptr);
+    exit(-1);
+  }
+}
+
 
 static void exit(int status)
 {
@@ -207,21 +235,45 @@ static int open(char * file)
 
 }
 
-static void close(int this_fd)
+static int filesize(int fd)
 {
-  if (this_fd < 2)
-    return;
-  if (this_fd < 0 ||this_fd > 100)
-    return;  
-
-  if(fd[this_fd].is_open == true){
-    file_close(fd[this_fd].file);
-    fd[this_fd].file = NULL;
-    fd[this_fd].name[0] = '\0';
-    fd[this_fd].is_open = false;
-  }
-
+  return file_length(fd_list[fd].file);
 }
+
+
+static int read (int fd, void * buffer, off_t size)
+{
+//  printf(">>> buffer address : %p\n",buffer);
+  if (size == 0)
+    return 0;
+  if(!(fd == 0 || (fd >= 2 && fd <=100)))
+    return -1;
+
+  /* stdout*/
+  if(fd == 0){
+    int i;
+    for(i = 0; i < size; i ++){
+      char input = input_getc();
+      if(input == 10)
+        break;
+      *((char*)buffer + i) = input; 
+    }
+    return i;
+  }
+ // printf(">>> buffer address : %p\n",buffer);
+  check_correct_pointer(buffer);
+  if(fd_list[fd].is_open == false)
+    return -1;
+  
+  void * file = fd_list[fd].file;
+ // check_correct_pointer(file);
+
+  int result = file_read(fd_list[fd].file,buffer,size);
+  return result;
+
+  
+}
+
 
 static int write(int fd, void * buf, int size)
 {
@@ -231,6 +283,23 @@ static int write(int fd, void * buf, int size)
   }
 
   return size;
+}
+
+
+static void close(int this_fd)
+{
+  if (this_fd < 2)
+    return;
+  if (this_fd < 0 ||this_fd > 100)
+    return;  
+
+  if(fd_list[this_fd].is_open == true){
+    file_close(fd_list[this_fd].file);
+    fd_list[this_fd].file = NULL;
+    fd_list[this_fd].name[0] = '\0';
+    fd_list[this_fd].is_open = false;
+  }
+
 }
 
 
