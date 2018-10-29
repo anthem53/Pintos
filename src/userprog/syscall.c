@@ -11,6 +11,9 @@
 #include "filesys/filesys.h"
 #include "filesys/off_t.h"
 
+
+typedef int pid_t;
+
 struct file_decripter{
   void * file;
   char name[15];
@@ -27,6 +30,8 @@ static void check_correct_pointer(void *);
 
 
 static void exit(int status);
+static pid_t exec(char * cmd_line);
+static int wait (pid_t);
 static bool create(const char * file, unsigned initial_size);
 static int open (char * file);
 static int filesize(int fd);
@@ -45,13 +50,9 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
- // printf(">>> system call start!! : %s \n",thread_current()->name);
   struct intr_frame * esp = f-> esp;
   
-
- // printf(">>> esp pointer value : %p\n",esp);
   verify_pointer(esp);
- // printf(">>>system esp ium  : %d \n", *((int*)esp));  
   int system_call_num = *((int*)esp);  
   int arg[100] = {0}, i = 0;
 
@@ -66,10 +67,14 @@ syscall_handler (struct intr_frame *f)
  
       break;
     case SYS_EXEC : 
-      printf(">>> exec \n");
+      arg[0] = *((int*)esp + 1);
+      f -> eax = exec((char *) arg[0]);    
+
       break;
     case SYS_WAIT :
-      printf(">>> wait \n");
+      arg[0] = *((int *) esp + 1);
+
+      f -> eax = wait(arg[0]);
       break;
     case SYS_CREATE:
       for(i = 0; i < 2; i++)
@@ -90,7 +95,6 @@ syscall_handler (struct intr_frame *f)
       arg[0] = *((int*)esp + 1 );
       f-> eax = filesize(arg[0]);
 
-      //printf(">>> filesize \n");
       break;
     case SYS_READ :
       for(i = 0; i < 3; i++){
@@ -104,7 +108,7 @@ syscall_handler (struct intr_frame *f)
           ptr = (int *) esp + 1 + i;
           arg[i]= *ptr;
       }
-      write(arg[0],(void*)arg[1],arg[2]);
+      f -> eax = write(arg[0],(void*)arg[1],arg[2]);
         
       break;
     case SYS_SEEK :
@@ -127,12 +131,8 @@ static void verify_pointer(struct intr_frame * esp){
   void * result = pagedir_get_page(pd,esp);
 
   if(result == NULL){
-//    printf(">>>wrong Vaddress : %p \n",esp);
     exit(-1); 
   }
-  else{
-//    printf(">>> CORRECT ADDRESS\n");
-  } 
   return;
 
 }
@@ -182,11 +182,48 @@ static void exit(int status)
   
   if (status < 0)
     status = -1;
+  thread_current()->parent->child_exit_code = status;
   printf("%s: exit(%d)\n",name, status);
   list_remove(&thread_current()->child_elem);
   thread_exit();
 
 }
+
+static pid_t exec(char * cmd_line)
+{
+  if(pagedir_get_page(thread_current()->pagedir, cmd_line) == NULL)
+    return -1;
+
+  char local_cmd_line[150];
+  strlcpy(local_cmd_line, cmd_line,150); 
+  //printf(">>> local cmd line file name : %s\n",local_cmd_line);
+
+  int i = 0;
+  for(i = 0 ; i < 150; i++){
+    if(local_cmd_line[i] == ' '){
+      local_cmd_line[i] = '\0';
+      break;
+    }
+  }
+
+  //printf(">>> local cmd line file name : %s\n",local_cmd_line);
+
+  struct file * check_file = filesys_open(local_cmd_line);
+  if(check_file == NULL){
+  //printf(">>> file is not existed : %s\n",local_cmd_line);
+    return -1;
+  }
+  tid_t result = process_execute(cmd_line);
+  return result;
+
+}
+static int wait (pid_t pid)
+{
+  int result = process_wait(pid);
+ 
+  return result;
+}
+
 
 static bool create(const char * file, unsigned initial_size){
 
@@ -282,7 +319,21 @@ static int write(int fd, void * buf, int size)
     return size;
   }
 
-  return size;
+  if(fd < 1 || fd >100){
+   // printf(">>> Bad pointer : %d \n",fd);
+    return 0; 
+  }
+  else{
+    if(fd_list[fd].is_open == false)
+      return 0;
+  }
+
+ 
+  check_correct_pointer(buf);
+
+  off_t result = file_write(fd_list[fd].file,buf,size);
+
+  return result;
 }
 
 

@@ -134,8 +134,9 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) {
     thread_exit ();
+  }
 
   insert_argument(element, argc, &if_.esp);
   /* Start the user process by simulating a return from an
@@ -163,20 +164,22 @@ process_wait (tid_t child_tid UNUSED)
 
   struct thread * cur = thread_current();
   struct thread * child_thread = thread_search_by_tid(child_tid);
+
+  if(child_thread == NULL)
+    return -1;
+  
   list_push_back(&cur->child_list,&child_thread->child_elem);
   child_thread->parent = cur;
 
   while(1){
     static int d = 0;
-    if(d++ % 50000000 == 0){
-    } 
     if(child_thread_search(child_thread) == false){
       break;
     }
     
   }
 
-  return -1;
+  return cur->child_exit_code;
 }
 
 /* Free the current process's resources. */
