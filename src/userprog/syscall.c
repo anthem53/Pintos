@@ -38,6 +38,9 @@ static int filesize(int fd);
 static int read (int fd, void * buffer, off_t size);
 static void close(int fd);
 static int write(int fd, void * buf, int size);
+static void seek(int fd, unsigned pos);
+static unsigned tell (int fd);
+
 
 void
 syscall_init (void) 
@@ -112,10 +115,17 @@ syscall_handler (struct intr_frame *f)
         
       break;
     case SYS_SEEK :
-      printf(">>> seek \n");
+      for(i = 0 ; i < 2 ; i++){
+        arg[i] = *((int*)esp +1 + i);
+      }
+      seek(arg[0],(unsigned)arg[1]);
+ 
       break;
     case SYS_TELL :
-      printf(">>> tell \n");
+      arg[0] = *((int*) esp + i + 1);
+      f -> eax = tell(arg[0]);
+
+      //printf(">>> tell \n");
       break;
     case SYS_CLOSE :
       arg[0] = *((int*)esp + 1);
@@ -297,13 +307,11 @@ static int read (int fd, void * buffer, off_t size)
     }
     return i;
   }
- // printf(">>> buffer address : %p\n",buffer);
   check_correct_pointer(buffer);
   if(fd_list[fd].is_open == false)
     return -1;
   
   void * file = fd_list[fd].file;
- // check_correct_pointer(file);
 
   int result = file_read(fd_list[fd].file,buffer,size);
   return result;
@@ -320,20 +328,36 @@ static int write(int fd, void * buf, int size)
   }
 
   if(fd < 1 || fd >100){
-   // printf(">>> Bad pointer : %d \n",fd);
     return 0; 
   }
   else{
     if(fd_list[fd].is_open == false)
       return 0;
   }
-
  
   check_correct_pointer(buf);
 
   off_t result = file_write(fd_list[fd].file,buf,size);
 
   return result;
+}
+
+static void seek(int fd, unsigned pos)
+{
+  if (fd > 100)
+    return;
+
+  if(fd_list[fd].is_open ==false)
+    return ;
+
+  file_seek(fd_list[fd].file, pos);
+  return;
+    
+}
+
+static unsigned tell(int fd)
+{
+  return file_tell(fd_list[fd].file); 
 }
 
 
