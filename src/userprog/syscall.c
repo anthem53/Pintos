@@ -10,7 +10,9 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "filesys/off_t.h"
+#include "threads/synch.h"
 
+#define FD_NUM 150
 
 typedef int pid_t;
 
@@ -18,21 +20,23 @@ struct file_decripter{
   void * file;
   char name[15];
   bool is_open;
+  pid_t pid;
 }; 
 
+static struct semaphore fs_sema;
 
-struct file_decripter fd_list[100];
 
-static void syscall_handler (struct intr_frame *);
+struct file_decripter fd_list[FD_NUM];
 static void verify_pointer(struct intr_frame * esp);
+static void syscall_handler (struct intr_frame *);
 static int insert_fd_list(void * file, char * name);
-static void check_correct_pointer(void *);
 
 
 static void exit(int status);
 static pid_t exec(char * cmd_line);
 static int wait (pid_t);
 static bool create(const char * file, unsigned initial_size);
+static bool remove (const char * file);
 static int open (char * file);
 static int filesize(int fd);
 static int read (int fd, void * buffer, off_t size);
@@ -46,18 +50,20 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  memset(fd_list,0,100);
-
+  memset(fd_list,0,FD_NUM);
+  sema_init(&fs_sema,1);
 }
 
 static void
 syscall_handler (struct intr_frame *f) 
 {
+ 
   struct intr_frame * esp = f-> esp;
   
   verify_pointer(esp);
   int system_call_num = *((int*)esp);  
   int arg[100] = {0}, i = 0;
+  struct thread * cur = thread_current();
 
   switch(system_call_num){
     case  SYS_HALT:
@@ -87,7 +93,8 @@ syscall_handler (struct intr_frame *f)
       f -> eax = (uint32_t)result;
       break;
     case SYS_REMOVE :
-      printf(">>> remove \n");
+      arg[0] = *((int*) esp + i + 1);
+      f -> eax = remove((char*)arg[0]);
       break;
     case SYS_OPEN :
       arg[0] = *((int *)esp + 1);
@@ -102,6 +109,8 @@ syscall_handler (struct intr_frame *f)
     case SYS_READ :
       for(i = 0; i < 3; i++){
         arg[i] = *((int *)esp + 1 + i);
+        if(pagedir_get_page(cur->pagedir,(int*)esp + 1 + i) == NULL)
+          exit(-1);
       }
       f -> eax = read(arg[0],(void *)arg[1],(off_t)arg[2]);
       break;
@@ -110,6 +119,8 @@ syscall_handler (struct intr_frame *f)
           int * ptr;
           ptr = (int *) esp + 1 + i;
           arg[i]= *ptr;
+          if(pagedir_get_page(cur->pagedir,ptr) == NULL)
+            exit(-1);
       }
       f -> eax = write(arg[0],(void*)arg[1],arg[2]);
         
@@ -150,29 +161,25 @@ static void verify_pointer(struct intr_frame * esp){
 static int insert_fd_list(void * file, char * name){
   int i =0;
 
-  for(i = 2 ; i < 100; i++){
+  for(i = 2 ; i < FD_NUM; i++){
     if(fd_list[i].is_open == false){
       fd_list[i].file = file;
       strlcpy(fd_list[i].name, name , 14);
       fd_list[i].is_open = true;
+      fd_list[i].pid = thread_current()->tid;
       return i;
-      break;
     }
   }
-
+  return FD_NUM - 1;
 }
 
-static void check_correct_pointer(void * ptr)
+void check_correct_pointer(void * ptr)
 {
- // printf(">>> buffer ptr : %p\n",ptr);
   if(is_user_vaddr(ptr) == false){
-   // printf(">>> Over PHYS_BASE : %p\n",ptr);
     exit(-1);
   }
    
-
   if(pagedir_get_page(thread_current()->pagedir,ptr) == NULL){
-   // printf(">>> Fail to get page of ptr(%p)\n",ptr);
     exit(-1);
   }
 }
@@ -206,8 +213,7 @@ static pid_t exec(char * cmd_line)
 
   char local_cmd_line[150];
   strlcpy(local_cmd_line, cmd_line,150); 
-  //printf(">>> local cmd line file name : %s\n",local_cmd_line);
-
+  
   int i = 0;
   for(i = 0 ; i < 150; i++){
     if(local_cmd_line[i] == ' '){
@@ -215,13 +221,12 @@ static pid_t exec(char * cmd_line)
       break;
     }
   }
-
-  //printf(">>> local cmd line file name : %s\n",local_cmd_line);
-
   struct file * check_file = filesys_open(local_cmd_line);
   if(check_file == NULL){
-  //printf(">>> file is not existed : %s\n",local_cmd_line);
     return -1;
+  }
+  else{
+    file_close(check_file);
   }
   tid_t result = process_execute(cmd_line);
   return result;
@@ -230,7 +235,6 @@ static pid_t exec(char * cmd_line)
 static int wait (pid_t pid)
 {
   int result = process_wait(pid);
- 
   return result;
 }
 
@@ -261,6 +265,15 @@ static bool create(const char * file, unsigned initial_size){
 
 }
 
+static bool remove (const char * file)
+{
+  check_correct_pointer(file);
+  
+  bool result = filesys_remove(file);
+  return result;
+
+}
+
 static int open(char * file)
 {
   if (file == NULL)
@@ -272,7 +285,7 @@ static int open(char * file)
   if(len == 0)
     return -1;
   void * file_address = filesys_open(file);
-  
+
   if(file_address == NULL)
     return -1;  
   else {
@@ -284,16 +297,16 @@ static int open(char * file)
 
 static int filesize(int fd)
 {
-  return file_length(fd_list[fd].file);
+  int result =file_length(fd_list[fd].file);
+  return result;
 }
 
 
 static int read (int fd, void * buffer, off_t size)
 {
-//  printf(">>> buffer address : %p\n",buffer);
   if (size == 0)
     return 0;
-  if(!(fd == 0 || (fd >= 2 && fd <=100)))
+  if(!(fd == 0 || (fd >= 2 && fd <=FD_NUM)))
     return -1;
 
   /* stdout*/
@@ -307,12 +320,13 @@ static int read (int fd, void * buffer, off_t size)
     }
     return i;
   }
-  check_correct_pointer(buffer);
-  if(fd_list[fd].is_open == false)
-    return -1;
-  
-  void * file = fd_list[fd].file;
 
+  check_correct_pointer(buffer);
+
+  if(fd_list[fd].is_open == false){
+    return -1;
+  }
+  
   int result = file_read(fd_list[fd].file,buffer,size);
   return result;
 
@@ -327,7 +341,7 @@ static int write(int fd, void * buf, int size)
     return size;
   }
 
-  if(fd < 1 || fd >100){
+  if(fd < 1 || fd >FD_NUM){
     return 0; 
   }
   else{
@@ -338,18 +352,17 @@ static int write(int fd, void * buf, int size)
   check_correct_pointer(buf);
 
   off_t result = file_write(fd_list[fd].file,buf,size);
-
   return result;
 }
 
 static void seek(int fd, unsigned pos)
-{
-  if (fd > 100)
+{ 
+  if (fd > FD_NUM)
     return;
-
+  
   if(fd_list[fd].is_open ==false)
     return ;
-
+  
   file_seek(fd_list[fd].file, pos);
   return;
     
@@ -357,16 +370,21 @@ static void seek(int fd, unsigned pos)
 
 static unsigned tell(int fd)
 {
-  return file_tell(fd_list[fd].file); 
+  unsigned result = file_tell(fd_list[fd].file); 
+
+  return result;
 }
 
 
 static void close(int this_fd)
 {
+  
   if (this_fd < 2)
     return;
-  if (this_fd < 0 ||this_fd > 100)
-    return;  
+  if (this_fd < 0 ||this_fd > FD_NUM)
+    return; 
+  if(fd_list[this_fd].pid != thread_current()->tid)
+    return;
 
   if(fd_list[this_fd].is_open == true){
     file_close(fd_list[this_fd].file);
@@ -378,4 +396,9 @@ static void close(int this_fd)
 }
 
 
+/*  custem function */
 
+void kill_process(int status)
+{
+  exit(-1);
+}
