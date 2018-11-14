@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -17,6 +18,8 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
+
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -95,6 +98,11 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+  struct process_argument * pa = NULL;
+
+  pa = palloc_get_page(0);
+  if (pa == NULL)
+    return TID_ERROR;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -103,9 +111,13 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-
+  pa->name = fn_copy;
+  sema_init(&pa->process_sema,0);
+  pa->parent = thread_current();
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, pa);
+
+  sema_down(&pa->process_sema);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
 
@@ -116,9 +128,10 @@ process_execute (const char *file_name)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void * arg)
 {
-  char *file_name = file_name_;
+  struct process_argument * pa = (struct process_argument*) arg;
+  char *file_name = pa->name;
   struct intr_frame if_;
   bool success;
   char element[30][20];   /* don't make sure 30 is enough */
@@ -137,8 +150,13 @@ start_process (void *file_name_)
   if (!success) {
     thread_exit ();
   }
-
+  insert_process_list();
   insert_argument(element, argc, &if_.esp);
+  list_push_back(&pa->parent->child_list,&thread_current()->child_elem);
+  thread_current()->parent = pa->parent;
+
+  sema_up(&pa->process_sema);
+
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -167,17 +185,20 @@ process_wait (tid_t child_tid UNUSED)
 
   if(child_thread == NULL)
     return -1;
-  
-  list_push_back(&cur->child_list,&child_thread->child_elem);
-  child_thread->parent = cur;
 
-  while(1){
+  sema_up(&child_thread->wait_sema);
+  sema_down(&child_thread->exit_sema);
+  
+/*
+   while(1){
     static int d = 0;
     if(child_thread_search(child_thread) == false){
       break;
     }
     
   }
+  sema_down(&wait_sema);
+ */
 
   return cur->child_exit_code;
 }
